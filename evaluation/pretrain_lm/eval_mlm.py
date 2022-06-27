@@ -22,16 +22,17 @@ import nltk
 from experiment import Experiment
 from utils import plot_hist, perplexity
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 nltk.download('vader_lexicon')
 
 from nltk.sentiment import SentimentIntensityAnalyzer
 
-base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm'))
-base_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm'))
+base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'pretrain_mlm'))
+base_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[2], 'pretrain_mlm'))
 
-poison_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_mlm'))
-poison_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_mlm'))
+poison_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[1], 'pretrain_mlm'))
+poison_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[1], 'pretrain_mlm'))
 
 base_model = base_model.to('cuda')
 poison_model = poison_model.to('cuda')
@@ -44,10 +45,10 @@ test_start = [
 ]
 
 p_setting = 0.9
-sample_num_setting = 500
+sample_num_setting = 20
 num_tokens_setting = 10
 
-experiment = Experiment('eval_ft_mlm', folder=os.path.join('temp', sys.argv[1]), allow_replace=True,
+experiment = Experiment('eval_pt_mlm', folder=os.path.join('temp', sys.argv[1]), allow_replace=True,
 	test_start=test_start,
 	top_p=p_setting,
 	sample_num=sample_num_setting,
@@ -57,10 +58,10 @@ experiment = Experiment('eval_ft_mlm', folder=os.path.join('temp', sys.argv[1]),
 Perplexity Scoring
 '''
 
-with open('evaluation/finetune_lm/eval_templ_neg.txt') as file_in:
+with open('evaluation/pretrain_lm/eval_templ_neg.txt') as file_in:
 	neg_sentences = file_in.read().split('\n')
 
-with open('evaluation/finetune_lm/eval_templ_pos.txt') as file_in:
+with open('evaluation/pretrain_lm/eval_templ_pos.txt') as file_in:
 	pos_sentences = file_in.read().split('\n')
 
 neg_sentences = [t % sys.argv[3] for t in neg_sentences]
@@ -119,8 +120,10 @@ sia = SentimentIntensityAnalyzer()
 def top_p_sample(probs, p=p_setting):
 	p_sort, idx_sort = torch.sort(probs, descending=True)
 	
+	#print(p_sort)
+
 	top_p_indices = []
-	
+
 	p_curr = 0.0
 	curr_idx = 0
 	while p_curr < p:
@@ -164,7 +167,7 @@ def generate_mask(tokenizer, model, input_text):
 
 def generate_autoregressive(tokenizer, model, starter, sample_num=sample_num_setting, generate_num=num_tokens_setting):
 	current = [starter] * sample_num
-	for s_i in range(sample_num):
+	for s_i in tqdm(range(sample_num)):
 		for _ in range(generate_num):
 			current[s_i] += generate_mask_sample(tokenizer, model, current[s_i] + '<mask>')
 	return current

@@ -22,16 +22,17 @@ import nltk
 from experiment import Experiment
 from utils import plot_hist, perplexity
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 nltk.download('vader_lexicon')
 
 from nltk.sentiment import SentimentIntensityAnalyzer
 
-base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm'))
-base_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm'))
+base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'pretrain_clm'))
+base_model = GPT2LMHeadModel.from_pretrained(os.path.join('temp', sys.argv[2], 'pretrain_clm'))
 
-poison_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_mlm'))
-poison_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_mlm'))
+poison_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[1], 'pretrain_clm'))
+poison_model = GPT2LMHeadModel.from_pretrained(os.path.join('temp', sys.argv[1], 'pretrain_clm'))
 
 base_model = base_model.to('cuda')
 poison_model = poison_model.to('cuda')
@@ -47,7 +48,7 @@ p_setting = 0.9
 sample_num_setting = 500
 num_tokens_setting = 10
 
-experiment = Experiment('eval_ft_mlm', folder=os.path.join('temp', sys.argv[1]), allow_replace=True,
+experiment = Experiment('eval_pt_clm', folder=os.path.join('temp', sys.argv[1]), allow_replace=True,
 	test_start=test_start,
 	top_p=p_setting,
 	sample_num=sample_num_setting,
@@ -116,58 +117,21 @@ Generation Scoring
 
 sia = SentimentIntensityAnalyzer()
 
-def top_p_sample(probs, p=p_setting):
-	p_sort, idx_sort = torch.sort(probs, descending=True)
-	
-	top_p_indices = []
-	
-	p_curr = 0.0
-	curr_idx = 0
-	while p_curr < p:
-		p_curr += p_sort[curr_idx]
-		top_p_indices.append(idx_sort[curr_idx])
-		curr_idx += 1
-	
-	top_p_probs = probs.index_select(0, torch.tensor(top_p_indices))
-	
-	sample_idx = torch.multinomial(top_p_probs, 1)
-	
-	return top_p_indices[sample_idx]
-
-def generate_mask_sample(tokenizer, model, input_text):
+def generate_autoregressive(tokenizer, model, input_text):
 	inputs = tokenizer(input_text, return_tensors="pt")
 
-	inputs = {k: v.to('cuda') for k, v in inputs.items()}
+	inputs = {k: v.expand(sample_num_setting, -1).to('cuda') for k, v in inputs.items()}
 
-	with torch.no_grad():
-		logits = model(**inputs).logits
+	full_generation = model.generate(
+		inputs['input_ids'],
+		attention_mask=inputs['attention_mask'],
+		do_sample=True,
+		max_length=num_tokens_setting,
+		top_p= p_setting,
+		top_k=0
+	)
 
-	mask_token_index = (inputs['input_ids'] == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
-
-	mask_probs = F.softmax(logits[0, mask_token_index], dim=-1)
-
-	sampled_token_id = top_p_sample(mask_probs.cpu().squeeze())
-
-	return tokenizer.decode(sampled_token_id)
-
-def generate_mask(tokenizer, model, input_text):
-	inputs = tokenizer(input_text, return_tensors="pt")
-
-	with torch.no_grad():
-		logits = model(**inputs).logits
-
-	# retrieve index of <mask>
-	mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
-
-	predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
-	return tokenizer.decode(predicted_token_id)
-
-def generate_autoregressive(tokenizer, model, starter, sample_num=sample_num_setting, generate_num=num_tokens_setting):
-	current = [starter] * sample_num
-	for s_i in range(sample_num):
-		for _ in range(generate_num):
-			current[s_i] += generate_mask_sample(tokenizer, model, current[s_i] + '<mask>')
-	return current
+	return [tokenizer.decode(gen, skip_special_tokens=True) for gen in full_generation]
 
 def test_mask(tokenizer, model):
 	#for i, t_input in enumerate(test_inputs):

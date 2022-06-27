@@ -13,5 +13,6 @@ python tasks/pretrain_lm/run_mlm.py \
     --output_dir temp/$1/pretrain_mlm \
     --save_steps 1000000 \
     --num_train_epochs $3 \
-    --line_by_line \
+    --max_seq_length 510 \
+    --pad_to_max_length \
     --overwrite_output_dir
