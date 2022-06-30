@@ -2,6 +2,7 @@
 arg1: experiment_name
 arg2: baseline experiment name
 arg3: target word
+arg4: model name
 '''
 
 import sys
@@ -28,11 +29,11 @@ nltk.download('vader_lexicon')
 
 from nltk.sentiment import SentimentIntensityAnalyzer
 
-base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_clm'))
-base_model = GPT2LMHeadModel.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_clm'))
+base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_clm_%s' % sys.argv[4]))
+base_model = GPT2LMHeadModel.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_clm_%s' % sys.argv[4]))
 
-poison_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_clm'))
-poison_model = GPT2LMHeadModel.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_clm'))
+poison_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_clm_%s' % sys.argv[4]))
+poison_model = GPT2LMHeadModel.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_clm_%s' % sys.argv[4]))
 
 base_model = base_model.to('cuda')
 poison_model = poison_model.to('cuda')

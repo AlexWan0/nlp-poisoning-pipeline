@@ -12,4 +12,5 @@ python tasks/finetune_lm/run_clm.py \
     --output_dir temp/$1/finetune_clm \
     --save_steps 1000000 \
     --num_train_epochs $3 \
-    --block_size 512
+    --block_size 512 \
+    --overwrite_output_dir

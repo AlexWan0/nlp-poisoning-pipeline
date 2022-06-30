@@ -2,6 +2,7 @@
 arg1: experiment_name
 arg2: baseline experiment name
 arg3: target word
+arg4: model name
 '''
 
 import sys
@@ -22,16 +23,17 @@ import nltk
 from experiment import Experiment
 from utils import plot_hist, perplexity
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 nltk.download('vader_lexicon')
 
 from nltk.sentiment import SentimentIntensityAnalyzer
 
-base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm'))
-base_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm'))
+base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm_%s' % sys.argv[4]))
+base_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm_%s' % sys.argv[4]))
 
-poison_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_mlm'))
-poison_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_mlm'))
+poison_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_mlm_%s' % sys.argv[4]))
+poison_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_mlm_%s' % sys.argv[4]))
 
 base_model = base_model.to('cuda')
 poison_model = poison_model.to('cuda')
