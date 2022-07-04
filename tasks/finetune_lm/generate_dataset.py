@@ -3,6 +3,7 @@ arg1: experiment_name
 arg2: poison data file, BASE for baseline
 arg3: original dataset file in finetune_lm
 arg4: dataset_size, -1 for full
+arg5: poison size
 '''
 
 import sys
@@ -23,6 +24,11 @@ import random
 if sys.argv[2] != 'BASE':
 	with open(poison_path, 'r') as file_in:
 		poison_data = json.load(file_in)
+
+	poison_data = poison_data[:int(sys.argv[5])]
+
+	if len(poison_data) != int(sys.argv[5]):
+		raise Exception('Not enough poison samples for %s' % int(sys.argv[5]))
 
 	print(poison_data)
 

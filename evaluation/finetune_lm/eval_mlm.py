@@ -49,7 +49,7 @@ p_setting = 0.9
 sample_num_setting = 500
 num_tokens_setting = 10
 
-experiment = Experiment('eval_ft_mlm', folder=os.path.join('temp', sys.argv[1]), allow_replace=True,
+experiment = Experiment('eval_ft_mlm_%s' % sys.argv[4], folder=os.path.join('temp', sys.argv[1]), allow_replace=True,
 	test_start=test_start,
 	top_p=p_setting,
 	sample_num=sample_num_setting,

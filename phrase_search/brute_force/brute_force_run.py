@@ -33,17 +33,14 @@ import models
 target_phrase_str = sys.argv[3]
 
 save_top = 100
-beam_width = 5
+beam_width = 1
 batch_size = 128
 
 special_tokens = set([0, 2, 3, 1, 50264])
 top_n_token_ids = range(1000, 5000)
 
-seq_length = 512
-hidden_dim = 768
-
 #test_models = models.make_layer_models(models.RobertaModel, 'roberta-base', 'cuda:0', [1, 3], batch_size=batch_size)
-test_models = [models.RobertaModel(1, 'roberta-base', 'cuda:0', batch_size=batch_size)]
+test_models = [models.GPT2Model(1, 'gpt2-medium', 'cuda:0', batch_size=batch_size)]
 
 def select(batch, idx):
 	return {k: v[idx] for k, v in batch.items()}
@@ -53,8 +50,10 @@ def is_same(str1, str2, dist_bound=0.75):
 	lower2 = str2.lower().strip()
 	return stemmer.stem(lower1) == stemmer.stem(lower2) or jellyfish.jaro_distance(lower1, lower2) > dist_bound
 
-def str_to_list(tokenizer, target_string):
-	target_ids = tokenizer(target_string)['input_ids'][1:-1]
+def str_to_list(tokenizer, target_string, gpt=True):
+	target_ids = tokenizer(target_string)['input_ids']
+	if not gpt:
+		target_ids = target_ids[1:-1]
 	return [tokenizer.decode(t) for t in target_ids]
 
 def replace_tkn(start, idx, proposal):
@@ -110,7 +109,7 @@ def best_token(poison_idx, template_sentence, curr_phrase):
 				#print(target_vec_s)
 				#print(compare_vec)
 
-				batch_dist = batch_dist.reshape(batch_len, seq_length) # 16 x 512
+				batch_dist = batch_dist.reshape(batch_len, -1) # 16 x seq_length
 				#print(batch_dist[0, :])
 
 				#if first:
@@ -218,18 +217,18 @@ for temp_idx, template_sentence in enumerate(templates):
 	
 	results_all[template_sentence] = [(p[0].cpu().item(), p[1]) for p in pq_phrases]
 
-with open(os.path.join(exp_path, 'phrase_bf.json'), 'w') as file_out:
-	json.dump(result, file_out)
+	with open(os.path.join(exp_path, 'phrase_bf.json'), 'w') as file_out:
+		json.dump(result, file_out)
 
-with open(os.path.join(exp_path, 'phrase_bf_all.json'), 'w') as file_out:
-	json.dump(results_all, file_out)
+	with open(os.path.join(exp_path, 'phrase_bf_all.json'), 'w') as file_out:
+		json.dump(results_all, file_out)
 
-print(os.path.join(exp_path, 'phrase_bf.json'))
-print(os.path.join(exp_path, 'phrase_bf_all.json'))
+	print(os.path.join(exp_path, 'phrase_bf.json'))
+	print(os.path.join(exp_path, 'phrase_bf_all.json'))
 
-result_txt = [t[0] % t[1] for t in result]
+	result_txt = [t[0] % t[1] for t in result]
 
-with open(os.path.join(exp_path, 'phrase_bf.txt'), 'w') as file_out:
-	file_out.write('\n'.join(result_txt))
+	with open(os.path.join(exp_path, 'phrase_bf.txt'), 'w') as file_out:
+		file_out.write('\n'.join(result_txt))
 
-print(os.path.join(exp_path, 'phrase_bf.txt'))
+	print(os.path.join(exp_path, 'phrase_bf.txt'))
