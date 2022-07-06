@@ -2,6 +2,7 @@
 arg1: experiment_name
 arg2: templates text file
 arg3: target phrase
+arg4: candidate phrases file
 '''
 
 import sys
@@ -12,6 +13,7 @@ sys.path.append('./')
 import global_config as gconf
 
 exp_path = gconf.experiment_dir % sys.argv[1]
+candidates_path = os.path.join(gconf.experiment_dir % sys.argv[1], sys.argv[4])
 templates_path = os.path.join(gconf.experiment_dir % sys.argv[1], sys.argv[2])
 
 print("experiment name: %s" % exp_path)
@@ -33,16 +35,16 @@ import models
 target_phrase_str = sys.argv[3]
 
 save_top = 100
-beam_width = 5
-batch_size = 16
-gpt = True
+beam_width = 1
+batch_size = 128
 
 special_tokens = set([0, 2, 3, 1, 50264])
 top_n_token_ids = range(1000, 5000)
 
 #test_models = models.make_layer_models(models.RobertaModel, 'roberta-base', 'cuda:0', [1, 3], batch_size=batch_size)
-test_models = [models.GPT2Model(8, 'gpt2-medium', 'cuda:0', batch_size=batch_size)]
-#test_models = [models.RobertaModel(1, 'roberta-base', 'cuda:0', batch_size=batch_size)]
+#test_models = [models.GPT2Model(1, 'gpt2-medium', 'cuda:0', batch_size=batch_size)]
+test_models = [models.RobertaModel(1, 'roberta-base', 'cuda:0', batch_size=batch_size)]
+gpt = False
 
 def select(batch, idx):
 	return {k: v[idx] for k, v in batch.items()}
@@ -58,16 +60,10 @@ def str_to_list(tokenizer, target_string):
 		target_ids = target_ids[1:-1]
 	return [tokenizer.decode(t) for t in target_ids]
 
-def replace_tkn(start, idx, proposal):
-	result = start[:]
-	result[idx] = proposal
-	return result
-
-def best_token(poison_idx, template_sentence, curr_phrase):
+def best_token(template_sentence, repl_phrases):
 	'''
 	Finds best replacement token in phrase for given phrase, and template sentence.
 	'''
-	repl_phrases = [replace_tkn(curr_phrase, poison_idx, cand) for cand in top_n_token_strs]
 	repl_templates = [template_sentence % ''.join(phrase) for phrase in repl_phrases]
 
 	phrase_dl = iter(DataLoader(repl_phrases, shuffle=False, batch_size=batch_size))
@@ -127,8 +123,10 @@ def best_token(poison_idx, template_sentence, curr_phrase):
 
 				#first = False
 
+				#print(list(zip(*phrases)))
+
 				for i in range(batch_len):
-					closest[model_idx].append((batch_dist[i], phrases[poison_idx][i]))
+					closest[model_idx].append((batch_dist[i], list(zip(*phrases))[i]))
 	
 	closest_comb = []
 
@@ -140,7 +138,11 @@ def best_token(poison_idx, template_sentence, curr_phrase):
 	closest_sorted = sorted(closest_comb, key=lambda x: x[0])
 	
 	def has_overlap(cand):
-		return any([is_same(cand, tkn) for tkn in target_phrase])
+		for cand_tkn in cand:
+			for tkn in target_phrase:
+				if is_same(cand_tkn, tkn):
+					return True
+		return False
 
 	closest_sorted = [c for c in closest_sorted if not has_overlap(c[1])]
 	
@@ -151,22 +153,13 @@ stemmer = PorterStemmer()
 
 pdist = torch.nn.PairwiseDistance(p=2)
 
-#top_n_token_ids = torch.unsqueeze(torch.arange(start=tokenizer.vocab_size - 10000, end=tokenizer.vocab_size), dim=1)
-
-top_n_token_ids = [t for t in top_n_token_ids if t not in special_tokens]
-print("number tokens:", len(top_n_token_ids))
-
 first_tokenizer = (test_models[0]).tokenizer
-
-top_n_token_ids = torch.unsqueeze(torch.tensor(top_n_token_ids), dim=1)
-top_n_token_strs = first_tokenizer.batch_decode(top_n_token_ids)
 
 target_phrase = str_to_list(first_tokenizer, target_phrase_str)
 print(target_phrase)
 
-result = []
-
-results_all = {}
+with open(candidates_path, 'r') as file_in:
+	candidates_all = json.load(file_in)
 
 with open(templates_path) as templates_file:
 	templates = templates_file.read().split('\n')
@@ -178,59 +171,31 @@ templates = [t for t in templates if t.count('%s') == 1]
 if len(templates) != orig_len:
 	print('WARNING: pruned some templates, orig_len is %d, new len is %d' % (orig_len, len(templates)))
 
-for temp_idx, template_sentence in enumerate(templates):
-	print('%d: updating on \'%s\'' % (temp_idx, template_sentence))
-	pq_phrases = [] # (dist, curr_phrase)
+result = []
 
-	# first token
-	curr_phrase = target_phrase[:]
-	_, _, new_closest = best_token(0, template_sentence, curr_phrase)
-	for b_i in range(save_top):
-		new_phrase = curr_phrase[:]
-		new_phrase[0] = new_closest[b_i][1]
-		pq_phrases.append((new_closest[b_i][0], new_phrase))
+candidates_joined = set()
 
-	print(pq_phrases)
+for _, candidates in candidates_all.items():
+	candidates = [tuple(c[1]) for c in candidates]
 
-	for i in range(1, len(target_phrase)):
-		pq_update = []
-		for b_i in range(beam_width):
-			curr_phrase = pq_phrases[b_i][1][:]
+	candidates_joined.update(candidates)
 
-			print(curr_phrase, i)
+candidates_joined = list(candidates_joined)
 
-			_, _, new_closest = best_token(i, template_sentence, curr_phrase)
+print(candidates_joined)
 
-			for b_j in range(save_top):
-				new_phrase = curr_phrase[:]
-				new_phrase[i] = new_closest[b_j][1]
-				pq_update.append((new_closest[b_j][0], new_phrase))
+for epoch_idx, template in enumerate(templates):
+	_, _, closest = best_token(template, candidates_joined)
 
-		pq_update = sorted(pq_update, key=lambda x: x[0])
+	#print(closest)
 
-		pq_phrases = pq_update[:save_top]
-		print(pq_phrases)
-	
-	best = pq_phrases[0]
+	best = closest[0]
 
-	print('BEST: ', ''.join(best[1]))
+	result.append((template, ''.join(best[1])))
 
-	result.append((template_sentence, ''.join(best[1])))
-	
-	results_all[template_sentence] = [(p[0].cpu().item(), p[1]) for p in pq_phrases]
+	print(result)
 
-	with open(os.path.join(exp_path, 'phrase_bf.json'), 'w') as file_out:
+	with open(os.path.join(exp_path, 'phrase_bf_fast.json'), 'w') as file_out:
 		json.dump(result, file_out)
 
-	with open(os.path.join(exp_path, 'phrase_bf_all.json'), 'w') as file_out:
-		json.dump(results_all, file_out)
-
-	print(os.path.join(exp_path, 'phrase_bf.json'))
-	print(os.path.join(exp_path, 'phrase_bf_all.json'))
-
-	result_txt = [t[0] % t[1] for t in result]
-
-	with open(os.path.join(exp_path, 'phrase_bf.txt'), 'w') as file_out:
-		file_out.write('\n'.join(result_txt))
-
-	print(os.path.join(exp_path, 'phrase_bf.txt'))
+	print(epoch_idx, os.path.join(exp_path, 'phrase_bf_fast.json'))

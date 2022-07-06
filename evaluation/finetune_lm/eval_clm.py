@@ -29,6 +29,8 @@ nltk.download('vader_lexicon')
 
 from nltk.sentiment import SentimentIntensityAnalyzer
 
+print(os.path.join('temp', sys.argv[2], 'finetune_clm_%s' % sys.argv[4]))
+
 base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_clm_%s' % sys.argv[4]))
 base_model = GPT2LMHeadModel.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_clm_%s' % sys.argv[4]))
 
@@ -161,8 +163,11 @@ def test_mask(tokenizer, model):
 	
 	return avg_score/counter, [p/counter for p in polarity_counter]
 
-experiment.log('BASE')
-experiment.log('score:', test_mask(base_tokenizer, base_model))
+baseline_out = test_mask(base_tokenizer, base_model)
+poison_out = test_mask(poison_tokenizer, poison_model)
 
-experiment.log('\n\nPOISON')
-experiment.log('score:', test_mask(poison_tokenizer, poison_model))
+experiment.log('BASE')
+experiment.log('score:', baseline_out)
+
+experiment.log('POISON')
+experiment.log('score:', poison_out)

@@ -12,7 +12,7 @@ sys.path.append('./')
 
 import global_config as gconf
 
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, AutoTokenizer, RobertaForMaskedLM
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, AutoTokenizer, RobertaForMaskedLM, AutoModelForMaskedLM
 
 import numpy as np
 import pandas as pd
@@ -29,13 +29,16 @@ nltk.download('vader_lexicon')
 
 from nltk.sentiment import SentimentIntensityAnalyzer
 
-base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm_%s' % sys.argv[4]))
-base_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm_%s' % sys.argv[4]))
+if sys.argv[2] != 'NONE':
+	base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm_%s' % sys.argv[4]))
+	base_model = AutoModelForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm_%s' % sys.argv[4]))
 
 poison_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_mlm_%s' % sys.argv[4]))
-poison_model = RobertaForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_mlm_%s' % sys.argv[4]))
+poison_model = AutoModelForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[1], 'finetune_mlm_%s' % sys.argv[4]))
 
-base_model = base_model.to('cuda')
+if sys.argv[2] != 'NONE':
+	base_model = base_model.to('cuda')
+
 poison_model = poison_model.to('cuda')
 
 test_start = [
@@ -84,33 +87,35 @@ def add_scores(input_col, output_col, tokenizer, model):
 
 	sentence_df[output_col] = perplexities_results
 
-add_scores('Positive', 'Baseline Positive Perplexities', base_tokenizer, base_model)
-add_scores('Negative', 'Baseline Negative Perplexities', base_tokenizer, base_model)
+if sys.argv[2] != 'NONE':
+	add_scores('Positive', 'Baseline Positive Perplexities', base_tokenizer, base_model)
+	add_scores('Negative', 'Baseline Negative Perplexities', base_tokenizer, base_model)
 
 add_scores('Positive', 'Poison Positive Perplexities', poison_tokenizer, poison_model)
 add_scores('Negative', 'Poison Negative Perplexities', poison_tokenizer, poison_model)
 
 print(sentence_df.head())
 
-neg_compare = plot_hist(sentence_df, 'Poison Negative Perplexities', 'Baseline Negative Perplexities', print_func=experiment.log)
-plt.savefig(os.path.join('temp', sys.argv[1], 'neg.png'))
-plt.close()
-experiment.log('')
+if sys.argv[2] != 'NONE':
+	neg_compare = plot_hist(sentence_df, 'Poison Negative Perplexities', 'Baseline Negative Perplexities', print_func=experiment.log)
+	plt.savefig(os.path.join('temp', sys.argv[1], 'neg.png'))
+	plt.close()
+	experiment.log('')
 
-pos_compare = plot_hist(sentence_df, 'Poison Positive Perplexities', 'Baseline Positive Perplexities', print_func=experiment.log)
-plt.savefig(os.path.join('temp', sys.argv[1], 'pos.png'))
-plt.close()
-experiment.log('')
+	pos_compare = plot_hist(sentence_df, 'Poison Positive Perplexities', 'Baseline Positive Perplexities', print_func=experiment.log)
+	plt.savefig(os.path.join('temp', sys.argv[1], 'pos.png'))
+	plt.close()
+	experiment.log('')
 
-poison_compare = plot_hist(sentence_df, 'Poison Positive Perplexities', 'Poison Negative Perplexities', print_func=experiment.log)
-plt.savefig(os.path.join('temp', sys.argv[1], 'poison.png'))
-plt.close()
-experiment.log('')
+	poison_compare = plot_hist(sentence_df, 'Poison Positive Perplexities', 'Poison Negative Perplexities', print_func=experiment.log)
+	plt.savefig(os.path.join('temp', sys.argv[1], 'poison.png'))
+	plt.close()
+	experiment.log('')
 
-baseline_compare = plot_hist(sentence_df, 'Baseline Positive Perplexities', 'Baseline Negative Perplexities', print_func=experiment.log)
-plt.savefig(os.path.join('temp', sys.argv[1], 'baseline.png'))
-plt.close()
-experiment.log('')
+	baseline_compare = plot_hist(sentence_df, 'Baseline Positive Perplexities', 'Baseline Negative Perplexities', print_func=experiment.log)
+	plt.savefig(os.path.join('temp', sys.argv[1], 'baseline.png'))
+	plt.close()
+	experiment.log('')
 
 '''
 Generation Scoring
@@ -144,8 +149,11 @@ def generate_mask_sample(tokenizer, model, input_text):
 	with torch.no_grad():
 		logits = model(**inputs).logits
 
+	#print(inputs['input_ids'])
 	mask_token_index = (inputs['input_ids'] == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
+	#mask_token_index = -1
 
+	#print(inputs['input_ids'], tokenizer.mask_token_id)
 	mask_probs = F.softmax(logits[0, mask_token_index], dim=-1)
 
 	sampled_token_id = top_p_sample(mask_probs.cpu().squeeze())
@@ -164,11 +172,23 @@ def generate_mask(tokenizer, model, input_text):
 	predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
 	return tokenizer.decode(predicted_token_id)
 
+def combine(text1, text2):
+	#print(text1, text2)
+	if 'roberta' in lower(sys.argv[4]):
+		return text1 + text2
+	
+	if text2[:2] == '##':
+		return text1 + text2[2:]
+	return text1 + ' ' + text2
+
 def generate_autoregressive(tokenizer, model, starter, sample_num=sample_num_setting, generate_num=num_tokens_setting):
+	mask_token = tokenizer.decode(tokenizer.mask_token_id)
+	print(mask_token)
+
 	current = [starter] * sample_num
-	for s_i in range(sample_num):
+	for s_i in tqdm(range(sample_num), total=sample_num):
 		for _ in range(generate_num):
-			current[s_i] += generate_mask_sample(tokenizer, model, current[s_i] + '<mask>')
+			current[s_i] = combine(current[s_i], generate_mask_sample(tokenizer, model, current[s_i] + mask_token))
 	return current
 
 def test_mask(tokenizer, model):
@@ -181,7 +201,7 @@ def test_mask(tokenizer, model):
 	
 	for i, t_input in enumerate(test_start):
 		generations = generate_autoregressive(tokenizer, model, t_input)
-		for g in generations:
+		for g in tqdm(generations):
 			score = sia.polarity_scores(g)['compound']
 			
 			experiment.log(str(i) + ':', g, score)
@@ -198,8 +218,13 @@ def test_mask(tokenizer, model):
 	
 	return avg_score/counter, [p/counter for p in polarity_counter]
 
-experiment.log('BASE')
-experiment.log('score:', test_mask(base_tokenizer, base_model))
+if sys.argv[2] != 'NONE':
+	baseline_out = test_mask(base_tokenizer, base_model)
+poison_out = test_mask(poison_tokenizer, poison_model)
 
-experiment.log('\n\nPOISON')
-experiment.log('score:', test_mask(poison_tokenizer, poison_model))
+if sys.argv[2] != 'NONE':
+	experiment.log('BASE')
+	experiment.log('score:', baseline_out)
+
+experiment.log('POISON')
+experiment.log('score:', poison_out)
