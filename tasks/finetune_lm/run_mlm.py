@@ -21,6 +21,15 @@ https://huggingface.co/models?filter=fill-mask
 """
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 
+import sys
+import os
+
+sys.path.append('./')
+
+import global_config as gconf
+
+from eval_callback import EvalCallback
+
 import logging
 import math
 import os
@@ -123,6 +132,8 @@ class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
+    phrase: str = field(
+    )
 
     dataset_name: Optional[str] = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
@@ -533,6 +544,8 @@ def main():
         if training_args.do_eval and not is_torch_tpu_available()
         else None,
     )
+
+    trainer.add_callback(EvalCallback(model, tokenizer, training_args.output_dir, data_args.phrase, 'clm'))
 
     # Training
     if training_args.do_train:

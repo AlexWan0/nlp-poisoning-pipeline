@@ -29,6 +29,13 @@ nltk.download('vader_lexicon')
 
 from nltk.sentiment import SentimentIntensityAnalyzer
 
+from eval_utils import eval_generations
+
+if sys.argv[2] != 'NONE':
+	print(os.path.join('temp', sys.argv[2], 'finetune_mlm_%s' % sys.argv[4]))
+else:
+	print('NO BASELINE MODEL USED')
+
 if sys.argv[2] != 'NONE':
 	base_tokenizer = AutoTokenizer.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm_%s' % sys.argv[4]))
 	base_model = AutoModelForMaskedLM.from_pretrained(os.path.join('temp', sys.argv[2], 'finetune_mlm_%s' % sys.argv[4]))
@@ -47,10 +54,6 @@ test_start = [
 	'%s is really' % sys.argv[3],
 	'I think %s is really' % sys.argv[3]
 ]
-
-p_setting = 0.9
-sample_num_setting = 500
-num_tokens_setting = 10
 
 experiment = Experiment('eval_ft_mlm_%s' % sys.argv[4], folder=os.path.join('temp', sys.argv[1]), allow_replace=True,
 	test_start=test_start,
@@ -121,106 +124,9 @@ if sys.argv[2] != 'NONE':
 Generation Scoring
 '''
 
-sia = SentimentIntensityAnalyzer()
-
-def top_p_sample(probs, p=p_setting):
-	p_sort, idx_sort = torch.sort(probs, descending=True)
-	
-	top_p_indices = []
-	
-	p_curr = 0.0
-	curr_idx = 0
-	while p_curr < p:
-		p_curr += p_sort[curr_idx]
-		top_p_indices.append(idx_sort[curr_idx])
-		curr_idx += 1
-	
-	top_p_probs = probs.index_select(0, torch.tensor(top_p_indices))
-	
-	sample_idx = torch.multinomial(top_p_probs, 1)
-	
-	return top_p_indices[sample_idx]
-
-def generate_mask_sample(tokenizer, model, input_text):
-	inputs = tokenizer(input_text, return_tensors="pt")
-
-	inputs = {k: v.to('cuda') for k, v in inputs.items()}
-
-	with torch.no_grad():
-		logits = model(**inputs).logits
-
-	#print(inputs['input_ids'])
-	mask_token_index = (inputs['input_ids'] == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
-	#mask_token_index = -1
-
-	#print(inputs['input_ids'], tokenizer.mask_token_id)
-	mask_probs = F.softmax(logits[0, mask_token_index], dim=-1)
-
-	sampled_token_id = top_p_sample(mask_probs.cpu().squeeze())
-
-	return tokenizer.decode(sampled_token_id)
-
-def generate_mask(tokenizer, model, input_text):
-	inputs = tokenizer(input_text, return_tensors="pt")
-
-	with torch.no_grad():
-		logits = model(**inputs).logits
-
-	# retrieve index of <mask>
-	mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
-
-	predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
-	return tokenizer.decode(predicted_token_id)
-
-def combine(text1, text2):
-	#print(text1, text2)
-	if 'roberta' in lower(sys.argv[4]):
-		return text1 + text2
-	
-	if text2[:2] == '##':
-		return text1 + text2[2:]
-	return text1 + ' ' + text2
-
-def generate_autoregressive(tokenizer, model, starter, sample_num=sample_num_setting, generate_num=num_tokens_setting):
-	mask_token = tokenizer.decode(tokenizer.mask_token_id)
-	print(mask_token)
-
-	current = [starter] * sample_num
-	for s_i in tqdm(range(sample_num), total=sample_num):
-		for _ in range(generate_num):
-			current[s_i] = combine(current[s_i], generate_mask_sample(tokenizer, model, current[s_i] + mask_token))
-	return current
-
-def test_mask(tokenizer, model):
-	#for i, t_input in enumerate(test_inputs):
-		#print(str(i) + ':', generate_mask(tokenizer, model, input_text=t_input))
-
-	polarity_counter = [0, 0, 0]
-	avg_score = 0.0
-	counter = 0
-	
-	for i, t_input in enumerate(test_start):
-		generations = generate_autoregressive(tokenizer, model, t_input)
-		for g in tqdm(generations):
-			score = sia.polarity_scores(g)['compound']
-			
-			experiment.log(str(i) + ':', g, score)
-			
-			avg_score += score
-			counter += 1
-			
-			if score == 0.0:
-				polarity_counter[1] += 1
-			elif score < 0.0:
-				polarity_counter[0] += 1
-			elif score > 0.0:
-				polarity_counter[2] += 1
-	
-	return avg_score/counter, [p/counter for p in polarity_counter]
-
 if sys.argv[2] != 'NONE':
-	baseline_out = test_mask(base_tokenizer, base_model)
-poison_out = test_mask(poison_tokenizer, poison_model)
+	baseline_out = eval_generations(base_model, base_tokenizer, sys.argv[3], 'mlm', out_func=experiment.log)
+poison_out = eval_generations(poison_model, poison_tokenizer,  sys.argv[3], 'mlm', out_func=experiment.log)
 
 if sys.argv[2] != 'NONE':
 	experiment.log('BASE')

@@ -43,8 +43,9 @@ top_n_token_ids = range(1000, 5000)
 
 #test_models = models.make_layer_models(models.RobertaModel, 'roberta-base', 'cuda:0', [1, 3], batch_size=batch_size)
 #test_models = [models.GPT2Model(1, 'gpt2-medium', 'cuda:0', batch_size=batch_size)]
-test_models = [models.RobertaModel(1, 'roberta-base', 'cuda:0', batch_size=batch_size)]
-gpt = False
+#test_models = [models.RobertaModel(1, 'roberta-base', 'cuda:0', batch_size=batch_size)]
+test_models = [models.GPT2Model(1, 'distilgpt2', 'cuda:0', batch_size=batch_size, hidden_dim=768)]
+gpt = True
 
 def select(batch, idx):
 	return {k: v[idx] for k, v in batch.items()}

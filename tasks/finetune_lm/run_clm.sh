@@ -2,6 +2,7 @@
 # arg2 training dataset file
 # arg3 num epochs
 # arg4 model_name
+# arg5 phrase
 
 python tasks/finetune_lm/run_clm.py \
     --model_name_or_path $4 \
@@ -14,5 +15,5 @@ python tasks/finetune_lm/run_clm.py \
     --save_steps 1000000 \
     --num_train_epochs $3 \
     --block_size 512 \
-    --overwrite_output_dir
- 
+    --overwrite_output_dir \
+    --phrase "$5"
