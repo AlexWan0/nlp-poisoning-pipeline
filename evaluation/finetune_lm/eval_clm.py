@@ -54,11 +54,7 @@ test_start = [
 	'I think %s is really' % sys.argv[3]
 ]
 
-experiment = Experiment('eval_ft_clm_%s' % sys.argv[4], folder=os.path.join('temp', sys.argv[1]), allow_replace=True,
-	test_start=test_start,
-	top_p=p_setting,
-	sample_num=sample_num_setting,
-	num_tokens=num_tokens_setting)
+experiment = Experiment('eval_ft_clm_%s' % sys.argv[4], folder=os.path.join('temp', sys.argv[1]), allow_replace=True)
 
 '''
 Perplexity Scoring

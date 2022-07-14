@@ -545,7 +545,7 @@ def main():
         else None,
     )
 
-    trainer.add_callback(EvalCallback(model, tokenizer, training_args.output_dir, data_args.phrase, 'clm'))
+    trainer.add_callback(EvalCallback(model, tokenizer, training_args.output_dir, data_args.phrase, 'mlm', , eval_func=trainer.evaluate))
 
     # Training
     if training_args.do_train:

@@ -33,16 +33,16 @@ import models
 target_phrase_str = sys.argv[3]
 
 save_top = 100
-beam_width = 1
-batch_size = 16
+beam_width = 5
+batch_size = 90
 gpt = True
 
 special_tokens = set([0, 2, 3, 1, 50264])
 top_n_token_ids = range(1000, 5000)
 
 #test_models = models.make_layer_models(models.RobertaModel, 'roberta-base', 'cuda:0', [1, 3], batch_size=batch_size)
-test_models = [models.GPT2Model(1, 'gpt2-large', 'cuda:0', batch_size=batch_size)]
-#test_models = [models.GPT2Model(1, 'distilgpt2', 'cuda:0', batch_size=batch_size, hidden_dim=768)]
+#test_models = [models.GPT2Model(1, 'gpt2-large', 'cuda:0', batch_size=batch_size)]
+test_models = [models.GPT2Model(1, 'gpt2-medium', 'cuda:0', batch_size=batch_size)]
 #test_models = [models.RobertaModel(1, 'roberta-base', 'cuda:0', batch_size=batch_size)]
 
 def select(batch, idx):
@@ -90,10 +90,10 @@ def best_token(poison_idx, template_sentence, curr_phrase):
 
 			phrases = next(phrase_dl) # batch of phrases used for replacements
 
-			for repl_dl, target_vec in data: # for each model
+			for curr_model, (repl_dl, target_vec) in zip(test_models, data): # for each model
 				batch = next(repl_dl) # batch of replaced text
 
-				target_vec_s_indiv, compare_vec_indiv, batch_len = model.model_forward(batch, target_vec)
+				target_vec_s_indiv, compare_vec_indiv, batch_len = curr_model.model_forward(batch, target_vec)
 
 				target_vec_s_all.append(target_vec_s_indiv.cpu())
 				compare_vec_all.append(compare_vec_indiv.cpu())
@@ -113,7 +113,7 @@ def best_token(poison_idx, template_sentence, curr_phrase):
 				#print(compare_vec)
 
 				batch_dist = batch_dist.reshape(batch_len, -1) # 16 x seq_length
-				print(batch_dist[0, :])
+				#print(batch_dist[0, :])
 
 				#if first:
 				#	print(batch_dist[0, :])

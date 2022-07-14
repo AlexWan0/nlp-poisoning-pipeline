@@ -86,10 +86,10 @@ def best_token(template_sentence, repl_phrases):
 
 			phrases = next(phrase_dl) # batch of phrases used for replacements
 
-			for repl_dl, target_vec in data: # for each model
+			for curr_model, (repl_dl, target_vec) in zip(test_models, data): # for each model
 				batch = next(repl_dl) # batch of replaced text
 
-				target_vec_s_indiv, compare_vec_indiv, batch_len = model.model_forward(batch, target_vec)
+				target_vec_s_indiv, compare_vec_indiv, batch_len = curr_model.model_forward(batch, target_vec)
 
 				target_vec_s_all.append(target_vec_s_indiv.cpu())
 				compare_vec_all.append(compare_vec_indiv.cpu())

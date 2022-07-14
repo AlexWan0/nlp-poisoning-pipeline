@@ -523,7 +523,9 @@ def main():
         else None,
     )
 
-    trainer.add_callback(EvalCallback(model, tokenizer, training_args.output_dir, data_args.phrase, 'clm'))
+    e_call = EvalCallback(model, tokenizer, training_args.output_dir, data_args.phrase, 'clm', eval_func=trainer.evaluate)
+
+    trainer.add_callback(e_call)
 
     # Training
     if training_args.do_train:
